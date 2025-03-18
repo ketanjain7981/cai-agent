@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: ["--dev", "--bind", "0.0.0.0"]
+    ports:
+      - "7880:7880"      # WebSocket signaling
+      - "7881:7881/udp"  # WebRTC UDP media
+
+  agent:
+    build: .
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - LIVEKIT_ROOM=my-room
+      - AGENT_ID=ai-agent
+      - DEEPGRAM_API_KEY=<YOUR_DEEPGRAM_KEY>
+      - OPENAI_API_KEY=<YOUR_OPENAI_KEY>
+    depends_on:
+      - livekit
+    ports:
+      - "8000:8000"
