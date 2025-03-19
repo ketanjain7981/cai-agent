@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomString } from "@/lib/client-utils";
-import { ConnectionDetails } from "@/lib/types";
 import { AccessToken, AccessTokenOptions, VideoGrant } from "livekit-server-sdk";
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -13,25 +12,20 @@ export async function GET(request: NextRequest) {
     // Extract query parameters
     const roomName = request.nextUrl.searchParams.get("roomName");
     const participantName = request.nextUrl.searchParams.get("participantName");
-    let metadata = request.nextUrl.searchParams.get("metadata") ?? ""; // ✅ Extract metadata
+    let metadata = request.nextUrl.searchParams.get("metadata") ?? "";
 
     if (!roomName || !participantName) {
       return new NextResponse("Missing required parameters", { status: 400 });
     }
 
-    // ✅ Debugging: Log metadata before assigning
-    if (!metadata) {
-      console.warn(`⚠️ Warning: No metadata received for participant ${participantName}`);
-    } else {
-      console.log(`✅ Received metadata for ${participantName}: ${metadata}`);
-    }
-
-    // ✅ Ensure metadata is valid JSON
+    // ✅ Ensure metadata is valid JSON and set botName from selectedPerson
     try {
-      JSON.parse(metadata);
+      let parsedMetadata = JSON.parse(metadata);
+      parsedMetadata.botName = parsedMetadata.selectedPerson || participantName;
+      metadata = JSON.stringify(parsedMetadata);
     } catch {
       console.error(`❌ Invalid JSON metadata: ${metadata}`);
-      metadata = JSON.stringify({ selectedPerson: participantName }); // ✅ Default to participantName
+      metadata = JSON.stringify({ selectedPerson: participantName, botName: participantName });
     }
 
     console.log(`🚀 Assigning metadata to participant ${participantName}:`, metadata);
@@ -44,7 +38,7 @@ export async function GET(request: NextRequest) {
       {
         identity: participantIdentity,
         name: participantName,
-        metadata, // ✅ Ensure metadata is assigned
+        metadata, // ✅ Ensuring metadata is correctly set
       },
       roomName,
     );
@@ -72,16 +66,4 @@ function createParticipantToken(userInfo: AccessTokenOptions, roomName: string) 
     canSubscribe: true,
   });
   return at.toJwt();
-}
-
-function getLiveKitURL(region: string | null): string {
-  let targetKey = "LIVEKIT_URL";
-  if (region) {
-    targetKey = `LIVEKIT_URL_${region}`.toUpperCase();
-  }
-  const url = process.env[targetKey];
-  if (!url) {
-    throw new Error(`${targetKey} is not defined`);
-  }
-  return url;
 }

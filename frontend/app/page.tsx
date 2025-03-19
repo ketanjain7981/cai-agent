@@ -26,20 +26,15 @@ function Tabs(props: React.PropsWithChildren<{}>) {
       }}
       aria-pressed={tabIndex === index}
     >
-      {/* @ts-ignore */}
       {child?.props.label}
     </button>
   ));
 
   return (
-    <>
-      <Dropdown /> {/* Moved outside so both tabs have access */}
-      <div className={styles.tabContainer}>
-        <div className={styles.tabSelect}>{tabs}</div>
-        {/* @ts-ignore */}
-        {props.children[tabIndex]}
-      </div>
-    </>
+    <div className={styles.tabContainer}>
+      <div className={styles.tabSelect}>{tabs}</div>
+      {props.children[tabIndex]}
+    </div>
   );
 }
 
@@ -47,10 +42,10 @@ function DemoMeetingTab(props: { label: string }) {
   const router = useRouter();
   const [e2ee, setE2ee] = useState(false);
   const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
-  const [selectedPerson, setSelectedPerson] = useState("Ram"); // Store selected name
+  const [selectedPerson, setSelectedPerson] = useState("Ram");
 
   const startMeeting = () => {
-    const metadata = encodeURIComponent(JSON.stringify({ selectedPerson })); // Pass metadata
+    const metadata = encodeURIComponent(JSON.stringify({ selectedPerson, botName: selectedPerson }));
 
     if (e2ee) {
       router.push(`/rooms/${generateRoomId()}?metadata=${metadata}#${encodePassphrase(sharedPassphrase)}`);
@@ -61,34 +56,12 @@ function DemoMeetingTab(props: { label: string }) {
 
   return (
     <>
-      <Dropdown onSelect={setSelectedPerson} /> {/* Capture selected name */}
+      <Dropdown onSelect={setSelectedPerson} />
       <div className={styles.tabContent}>
         <p style={{ margin: 0 }}>Try LiveKit Meet for free with our live demo project.</p>
         <button style={{ marginTop: '1rem' }} className="lk-button" onClick={startMeeting}>
           Start Meeting
         </button>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-            <input
-              id="use-e2ee"
-              type="checkbox"
-              checked={e2ee}
-              onChange={(ev) => setE2ee(ev.target.checked)}
-            />
-            <label htmlFor="use-e2ee">Enable end-to-end encryption</label>
-          </div>
-          {e2ee && (
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-              <label htmlFor="passphrase">Passphrase</label>
-              <input
-                id="passphrase"
-                type="password"
-                value={sharedPassphrase}
-                onChange={(ev) => setSharedPassphrase(ev.target.value)}
-              />
-            </div>
-          )}
-        </div>
       </div>
     </>
   );
@@ -98,14 +71,14 @@ function CustomConnectionTab(props: { label: string }) {
   const router = useRouter();
   const [e2ee, setE2ee] = useState(false);
   const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
-  const [selectedPerson, setSelectedPerson] = useState("Ram"); // Store selected name
+  const [selectedPerson, setSelectedPerson] = useState("Ram");
 
   const onSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
     const formData = new FormData(event.target as HTMLFormElement);
     const serverUrl = formData.get("serverUrl");
     const token = formData.get("token");
-    const metadata = encodeURIComponent(JSON.stringify({ selectedPerson })); // Pass metadata
+    const metadata = encodeURIComponent(JSON.stringify({ selectedPerson, botName: selectedPerson }));
 
     if (e2ee) {
       router.push(
@@ -118,7 +91,7 @@ function CustomConnectionTab(props: { label: string }) {
 
   return (
     <>
-      <Dropdown onSelect={setSelectedPerson} /> {/* Capture selected name */}
+      <Dropdown onSelect={setSelectedPerson} />
       <form className={styles.tabContent} onSubmit={onSubmit}>
         <p style={{ marginTop: 0 }}>
           Connect LiveKit Meet with a custom server using LiveKit Cloud or LiveKit Server.
@@ -172,15 +145,7 @@ export default function Page() {
         </Suspense>
       </main>
       <footer data-lk-theme="default">
-        Hosted on{' '}
-        <a href="https://livekit.io/cloud?ref=meet" rel="noopener">
-          LiveKit Cloud
-        </a>
-        . Source code on{' '}
-        <a href="https://github.com/livekit/meet?ref=meet" rel="noopener">
-          GitHub
-        </a>
-        .
+        Hosted on <a href="https://livekit.io/cloud?ref=meet" rel="noopener">LiveKit Cloud</a>. Source code on <a href="https://github.com/livekit/meet?ref=meet" rel="noopener">GitHub</a>.
       </footer>
     </>
   );
