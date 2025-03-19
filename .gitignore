@@ -1,0 +1,33 @@
+# Dependency directories
+node_modules/
+my-app/node_modules/
+
+# Build directories
+build/
+dist/
+my-app/build/
+my-app/dist/
+
+# Environment files
+.env
+.env.local
+my-app/.env
+my-app/.env.local
+
+# Editor directories and files
+.vscode/
+.idea/
+my-app/.vscode/
+my-app/.idea/
+
+# Logs
+logs/
+*.log
+my-app/logs/
+my-app/*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+my-app/.DS_Store
+my-app/Thumbs.db
