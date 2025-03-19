@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function Dropdown() {
+export default function Dropdown({ onSelect }: { onSelect: (name: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState("Ram");
   const people = ["Ram", "Shyam", "Ketan"];
@@ -33,6 +33,7 @@ export default function Dropdown() {
                 onClick={() => {
                   setSelectedPerson(person);
                   setIsOpen(false);
+                  onSelect(person); // ✅ Send selection to parent component
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

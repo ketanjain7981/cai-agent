@@ -1,85 +1,81 @@
-import { randomString } from '@/lib/client-utils';
-import { ConnectionDetails } from '@/lib/types';
-import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import { randomString } from "@/lib/client-utils";
+import { ConnectionDetails } from "@/lib/types";
+import { AccessToken, AccessTokenOptions, VideoGrant } from "livekit-server-sdk";
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
-const COOKIE_KEY = 'random-participant-postfix';
+const COOKIE_KEY = "random-participant-postfix";
 
 export async function GET(request: NextRequest) {
   try {
-    // Parse query parameters
-    const roomName = request.nextUrl.searchParams.get('roomName');
-    const participantName = request.nextUrl.searchParams.get('participantName');
-    const metadata = request.nextUrl.searchParams.get('metadata') ?? '';
-    const region = request.nextUrl.searchParams.get('region');
-    const livekitServerUrl = region ? getLiveKitURL(region) : LIVEKIT_URL;
-    let randomParticipantPostfix = request.cookies.get(COOKIE_KEY)?.value;
-    if (livekitServerUrl === undefined) {
-      throw new Error('Invalid region');
+    // Extract query parameters
+    const roomName = request.nextUrl.searchParams.get("roomName");
+    const participantName = request.nextUrl.searchParams.get("participantName");
+    let metadata = request.nextUrl.searchParams.get("metadata") ?? ""; // ✅ Extract metadata
+
+    if (!roomName || !participantName) {
+      return new NextResponse("Missing required parameters", { status: 400 });
     }
 
-    if (typeof roomName !== 'string') {
-      return new NextResponse('Missing required query parameter: roomName', { status: 400 });
-    }
-    if (participantName === null) {
-      return new NextResponse('Missing required query parameter: participantName', { status: 400 });
+    // ✅ Debugging: Log metadata before assigning
+    if (!metadata) {
+      console.warn(`⚠️ Warning: No metadata received for participant ${participantName}`);
+    } else {
+      console.log(`✅ Received metadata for ${participantName}: ${metadata}`);
     }
 
-    // Generate participant token
-    if (!randomParticipantPostfix) {
-      randomParticipantPostfix = randomString(4);
+    // ✅ Ensure metadata is valid JSON
+    try {
+      JSON.parse(metadata);
+    } catch {
+      console.error(`❌ Invalid JSON metadata: ${metadata}`);
+      metadata = JSON.stringify({ selectedPerson: participantName }); // ✅ Default to participantName
     }
+
+    console.log(`🚀 Assigning metadata to participant ${participantName}:`, metadata);
+
+    // Generate a unique participant identity
+    const participantIdentity = `${participantName}__${randomString(4)}`;
+
+    // Generate a participant token
     const participantToken = await createParticipantToken(
       {
-        identity: `${participantName}__${randomParticipantPostfix}`,
+        identity: participantIdentity,
         name: participantName,
-        metadata,
+        metadata, // ✅ Ensure metadata is assigned
       },
       roomName,
     );
 
-    // Return connection details
-    const data: ConnectionDetails = {
-      serverUrl: livekitServerUrl,
-      roomName: roomName,
-      participantToken: participantToken,
-      participantName: participantName,
-    };
-    return new NextResponse(JSON.stringify(data), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Set-Cookie': `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`,
-      },
+    return NextResponse.json({
+      serverUrl: LIVEKIT_URL,
+      roomName,
+      participantToken,
+      participantName,
     });
   } catch (error) {
-    if (error instanceof Error) {
-      return new NextResponse(error.message, { status: 500 });
-    }
+    console.error("❌ Error generating participant token:", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
 
 function createParticipantToken(userInfo: AccessTokenOptions, roomName: string) {
   const at = new AccessToken(API_KEY, API_SECRET, userInfo);
-  at.ttl = '5m';
-  const grant: VideoGrant = {
+  at.ttl = "5m"; // Token expires in 5 minutes
+  at.addGrant({
     room: roomName,
     roomJoin: true,
     canPublish: true,
     canPublishData: true,
     canSubscribe: true,
-  };
-  at.addGrant(grant);
+  });
   return at.toJwt();
 }
 
-/**
- * Get the LiveKit server URL for the given region.
- */
 function getLiveKitURL(region: string | null): string {
-  let targetKey = 'LIVEKIT_URL';
+  let targetKey = "LIVEKIT_URL";
   if (region) {
     targetKey = `LIVEKIT_URL_${region}`.toUpperCase();
   }
@@ -88,12 +84,4 @@ function getLiveKitURL(region: string | null): string {
     throw new Error(`${targetKey} is not defined`);
   }
   return url;
-}
-
-function getCookieExpirationTime(): string {
-  var now = new Date();
-  var time = now.getTime();
-  var expireTime = time + 60 * 120 * 1000;
-  now.setTime(expireTime);
-  return now.toUTCString();
 }
