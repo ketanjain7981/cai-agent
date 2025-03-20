@@ -16,7 +16,7 @@ from livekit.agents import (
     metrics,
 )
 from livekit.agents.pipeline import VoicePipelineAgent
-from livekit.plugins import openai, deepgram, silero, turn_detector
+from livekit.plugins import openai, silero, turn_detector, azure
 
 # Load environment variables
 load_dotenv(dotenv_path=".env.local")
@@ -81,9 +81,14 @@ async def entrypoint(ctx: JobContext):
         """Callback before LLM generates a response, capturing video frames."""
         latest_image = await get_latest_image(ctx.room)
         if latest_image:
+            width = latest_image.width
+            height = latest_image.height
+            logger.debug(f"Captured image: width={width}, height={height}")
             image_content = [ChatImage(image=latest_image)]
-            chat_ctx.messages.append(ChatMessage(role="user", content=image_content))
+            chat_ctx.messages.append(ChatMessage(role="user", content=[*image_content, "Please analyze the image I just shared."]))
             logger.debug("Added latest frame to conversation context")
+        else:
+            logger.warning("No image captured.")
 
     logger.info(f"🔗 Connecting to room {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_ALL)
@@ -120,16 +125,17 @@ async def entrypoint(ctx: JobContext):
                     f"2. Brief and to the point – under 30 words.\n"
                     f"3. Simple language – easy to understand when spoken.\n"
                     f"4. Focus on conversational clarity.\n\n"
-                    f"Your output should be the spoken response only, as if you are talking to the user.\n</prompt>"
+                    f"Your output should be the spoken response only, as if you are talking to the user.\n"
+                    f"You will also receive images. Analyze these images and incorporate your observations into your responses.\n</prompt>"
                 ),
             )
 
     # Initialize the voice assistant agent
     agent = VoicePipelineAgent(
         vad=ctx.proc.userdata["vad"],
-        stt=deepgram.STT(),
+        stt=azure.STT(),
         llm=openai.LLM(model="gpt-4o-mini"),
-        tts=deepgram.TTS(),
+        tts=azure.TTS(voice="en-US-JennyNeural"), # Choose your preferred Azure voice
         turn_detector=turn_detector.EOUModel(),
         min_endpointing_delay=0.5,
         max_endpointing_delay=5.0,
