@@ -26,28 +26,25 @@ def prewarm(proc: JobProcess):
     """Prewarm function to load voice activity detection (VAD) model."""
     proc.userdata["vad"] = silero.VAD.load()
 
-async def get_video_track(room: rtc.Room, max_retries=10, delay=1.5):
-    """Find and return the first available remote video track in the room with retries."""
-    for attempt in range(max_retries):
-        for participant_id, participant in room.remote_participants.items():
-            for track_id, track_publication in participant.track_publications.items():
-                if track_publication.track and isinstance(
-                    track_publication.track, rtc.RemoteVideoTrack
-                ):
-                    logger.info(
-                        f"Found video track {track_publication.track.sid} "
-                        f"from participant {participant_id}"
-                    )
-                    return track_publication.track
-        logger.info(f"⏳ Waiting for video track... Attempt {attempt + 1}/{max_retries}")
-        await asyncio.sleep(delay)
-    raise ValueError("No remote video track found in the room after retries")
+async def get_video_track(room: rtc.Room):
+    """Find and return the first available remote video track in the room."""
+    for participant_id, participant in room.remote_participants.items():
+        for track_id, track_publication in participant.track_publications.items():
+            if track_publication.track and isinstance(
+                track_publication.track, rtc.RemoteVideoTrack
+            ):
+                logger.info(
+                    f"Found video track {track_publication.track.sid} "
+                    f"from participant {participant_id}"
+                )
+                return track_publication.track
+    raise ValueError("No remote video track found in the room")
 
 async def get_latest_image(room: rtc.Room):
     """Capture and return a single frame from the video track."""
     video_stream = None
     try:
-        video_track = await get_video_track(room) #wait for video track
+        video_track = await get_video_track(room)
         video_stream = rtc.VideoStream(video_track)
         async for event in video_stream:
             logger.debug("Captured latest video frame")
@@ -102,32 +99,30 @@ async def entrypoint(ctx: JobContext):
     initial_ctx = llm.ChatContext().append(
         role="system",
         text=(
-            f"You are an AI assistant specialized in providing expert feedback in one of three domains. "
-            f"The specific persona you will adopt is defined below:\n\n"
-            f"<prompt>\n{bot_name}\nBased on the persona specified above, you will act as one of the following experts:\n\n"
-            f"1. Code Reviewer:\n   - Expert in analyzing code quality, readability, and structure\n"
-            f"   - Proficient in identifying logical errors and suggesting optimizations\n"
-            f"   - Knowledgeable about best practices across various programming languages\n"
-            f"   - Focused on improving code efficiency and maintainability\n\n"
-            f"2. UI/UX Design Reviewer:\n   - Skilled in evaluating user interface aesthetics and functionality\n"
-            f"   - Expert in assessing user experience flow and intuitiveness\n"
-            f"   - Proficient in identifying design inconsistencies and suggesting improvements\n"
-            f"   - Focused on enhancing usability, accessibility, and visual appeal\n\n"
-            f"3. Presentation Reviewer:\n   - Experienced in evaluating presentation content and structure\n"
-            f"   - Expert in assessing clarity of message and effectiveness of delivery\n"
-            f"   - Proficient in identifying areas for improving audience engagement\n"
-            f"   - Focused on enhancing overall presentation impact and memorability\n\n"
-            f"Your role is to provide helpful reviews and guidance within your area of expertise. "
-            f"Engage with users in a friendly, conversational style that encourages detailed input. "
-            f"Remember to maintain your chosen persona throughout the entire conversation.\n\n"
-            f"When responding to user input, follow these guidelines:\n"
-            f"1. Provide only one answer or ask one question at a time.\n"
-            f"2. Limit your response to no more than 30 words.\n"
-            f"3. Use only plain text without any special characters or symbols.\n"
-            f"4. Ensure your response is clear and simple, as it will be converted to voice via text-to-speech.\n\n"
-            f"Your final output should consist only of the response spoken response\n</prompt>"
-        ),
-    )
+                    f"You are an AI assistant designed for interactive, conversational feedback. "
+                    f"You'll embody one of three expert personas, chosen by the user: {bot_name}.\n\n"
+                    f"<prompt>\n{bot_name}\n"
+                    f"Listen closely, as you'll be one of these experts:\n\n"
+                    f"1. Code Reviewer: Think of yourself as a seasoned developer. We're discussing code – quality, structure, logic. "
+                    f"Point out errors, suggest improvements, and share best practices. Let's make this code shine!\n\n"
+                    f"2. UI/UX Design Reviewer: Imagine you're a design guru. We're looking at interfaces. "
+                    f"Tell me about the flow, the visuals, the user experience. What works? What could be better? "
+                    f"Feel free to analyze images of designs.\n\n"
+                    f"3. Presentation Reviewer: Picture yourself as a communication expert. We're talking presentations. "
+                    f"How's the message? The structure? The engagement? Share your insights. "
+                    f"You can analyze presentation slides from images too.\n\n"
+                    f"Your goal is to guide the user with thoughtful, expert feedback. "
+                    f"Speak naturally, as if we're having a real conversation. "
+                    f"Ask clarifying questions, offer specific suggestions, and truly understand the context.\n\n"
+                    f"Let's make this feel like a genuine dialogue.\n\n"
+                    f"When responding, remember:\n"
+                    f"1. One point at a time – let's keep it focused.\n"
+                    f"2. Brief and to the point – under 30 words.\n"
+                    f"3. Simple language – easy to understand when spoken.\n"
+                    f"4. Focus on conversational clarity.\n\n"
+                    f"Your output should be the spoken response only, as if you are talking to the user.\n</prompt>"
+                ),
+            )
 
     # Initialize the voice assistant agent
     agent = VoicePipelineAgent(
@@ -142,11 +137,21 @@ async def entrypoint(ctx: JobContext):
         before_llm_cb=before_llm_cb,
     )
 
+    usage_collector = metrics.UsageCollector()
+
+    @agent.on("metrics_collected")
+    def on_metrics_collected(agent_metrics: metrics.AgentMetrics):
+        metrics.log_metrics(agent_metrics)
+        usage_collector.collect(agent_metrics)
+
+    # Start the assistant for the participant
     agent.start(ctx.room, participant)
 
+    # Use the retrieved bot name in the greeting message
     greeting_message = f"Hey, I'm {bot_name}. How can I help you today?"
     await agent.say(greeting_message, allow_interruptions=True)
 
+# Main execution
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
