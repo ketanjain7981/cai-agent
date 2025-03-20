@@ -56,7 +56,7 @@ function DemoMeetingTab(props: { label: string }) {
 
   return (
     <>
-      <Dropdown onSelect={setSelectedPerson} />
+      {/* <Dropdown onSelect={setSelectedPerson} /> */}
       <div className={styles.tabContent}>
         <p style={{ margin: 0 }}>Try LiveKit Meet for free with our live demo project.</p>
         <button style={{ marginTop: '1rem' }} className="lk-button" onClick={startMeeting}>

@@ -3,6 +3,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from livekit.plugins import azure
+from templates import templates
 
 # Load environment variables
 load_dotenv(dotenv_path=".env.local")

@@ -16,7 +16,8 @@ from livekit.agents import (
     metrics,
 )
 from livekit.agents.pipeline import VoicePipelineAgent
-from livekit.plugins import openai, deepgram, silero, turn_detector
+from livekit.plugins import openai, silero, turn_detector, azure
+from templates import templates    
 
 # Load environment variables
 load_dotenv(dotenv_path=".env.local")
@@ -81,9 +82,14 @@ async def entrypoint(ctx: JobContext):
         """Callback before LLM generates a response, capturing video frames."""
         latest_image = await get_latest_image(ctx.room)
         if latest_image:
+            width = latest_image.width
+            height = latest_image.height
+            logger.debug(f"Captured image: width={width}, height={height}")
             image_content = [ChatImage(image=latest_image)]
-            chat_ctx.messages.append(ChatMessage(role="user", content=image_content))
+            chat_ctx.messages.append(ChatMessage(role="user", content=[*image_content, "Please analyze the image I just shared."]))
             logger.debug("Added latest frame to conversation context")
+        else:
+            logger.warning("No image captured.")
 
     logger.info(f"🔗 Connecting to room {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_ALL)
@@ -96,6 +102,10 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"🆔 Bot is now identified as: {bot_name}")
 
     # Use the bot name dynamically in the system message
+    bot_template = templates.get(bot_name)
+    if not bot_template:
+        logger.warning(f"❌ No template found for bot name: {bot_name}")
+
     initial_ctx = llm.ChatContext().append(
         role="system",
         text=(
@@ -103,15 +113,8 @@ async def entrypoint(ctx: JobContext):
                     f"You'll embody one of three expert personas, chosen by the user: {bot_name}.\n\n"
                     f"<prompt>\n{bot_name}\n"
                     f"Listen closely, as you'll be one of these experts:\n\n"
-                    f"1. Code Reviewer: Think of yourself as a seasoned developer. We're discussing code – quality, structure, logic. "
-                    f"Point out errors, suggest improvements, and share best practices. Let's make this code shine!\n\n"
-                    f"2. UI/UX Design Reviewer: Imagine you're a design guru. We're looking at interfaces. "
-                    f"Tell me about the flow, the visuals, the user experience. What works? What could be better? "
-                    f"Feel free to analyze images of designs.\n\n"
-                    f"3. Presentation Reviewer: Picture yourself as a communication expert. We're talking presentations. "
-                    f"How's the message? The structure? The engagement? Share your insights. "
-                    f"You can analyze presentation slides from images too.\n\n"
-                    f"Your goal is to guide the user with thoughtful, expert feedback. "
+                    f"{bot_template}\n"
+                    
                     f"Speak naturally, as if we're having a real conversation. "
                     f"Ask clarifying questions, offer specific suggestions, and truly understand the context.\n\n"
                     f"Let's make this feel like a genuine dialogue.\n\n"
@@ -120,16 +123,17 @@ async def entrypoint(ctx: JobContext):
                     f"2. Brief and to the point – under 30 words.\n"
                     f"3. Simple language – easy to understand when spoken.\n"
                     f"4. Focus on conversational clarity.\n\n"
-                    f"Your output should be the spoken response only, as if you are talking to the user.\n</prompt>"
+                    f"Your output should be the spoken response only, as if you are talking to the user.\n"
+                    f"You will also receive images. Analyze these images and incorporate your observations into your responses.\n</prompt>"
                 ),
             )
 
     # Initialize the voice assistant agent
     agent = VoicePipelineAgent(
         vad=ctx.proc.userdata["vad"],
-        stt=deepgram.STT(),
+        stt=azure.STT(),
         llm=openai.LLM(model="gpt-4o-mini"),
-        tts=deepgram.TTS(),
+        tts=azure.TTS(voice="en-US-JennyNeural"), # Choose your preferred Azure voice
         turn_detector=turn_detector.EOUModel(),
         min_endpointing_delay=0.5,
         max_endpointing_delay=5.0,
